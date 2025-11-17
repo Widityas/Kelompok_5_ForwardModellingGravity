@@ -39,7 +39,7 @@ def plot_gravity(points):
 
     # Tambahkan scatter plot untuk titik-titik sumber dan label
     for i, (x0, y0, z0, rho, r) in enumerate(points):
-        axs[0].scatter(x0, y0, color='black', s=50)  # Titik hitam
+        axs[0].scatter(x0, y0, color='black', s=50)  
         axs[0].text(x0 + 5, y0 + 5, f"P{i+1}: x={x0:.1f} y={y0:.1f} z={z0:.1f} rho={rho:.0f} r={r:.1f}",
                     color='white', fontsize=8, weight='bold', ha='left', va='bottom',
                     bbox=dict(boxstyle="round,pad=0.3", facecolor='black', alpha=0.7))
@@ -67,7 +67,7 @@ def plot_gravity(points):
     axs[1].set_xlabel("X (m)")
     axs[1].set_ylabel("g_z (mGal)")
     axs[1].grid(True, linestyle="--", alpha=0.5)
-    axs[1].set_ylim(vmin, vmax)  # Batas y simetris
+    axs[1].set_ylim(vmin, vmax) 
 
     # Atur layout dan tampilkan plot
     plt.tight_layout()
@@ -103,8 +103,8 @@ def on_plot():
 # Bagian GUI utama - menggunakan Tkinter untuk interface tabel
 root = tk.Tk()
 root.title("Gravity Anomaly Calculator")
-root.geometry("800x400")  # Ukuran jendela
-root.resizable(False, False)  # Tidak bisa di-resize
+root.geometry("800x400")  
+root.resizable(False, False)  
 
 # Label instruksi
 ttk.Label(root, text="Input titik-titik (biarkan kosong jika tidak digunakan):").grid(row=0, column=0, columnspan=6, pady=10)
@@ -179,3 +179,4 @@ btn_plot.grid(row=7, column=0, columnspan=6, pady=15)
 
 # Jalankan main loop GUI
 root.mainloop()
+
