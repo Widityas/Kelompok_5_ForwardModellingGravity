@@ -1,0 +1,286 @@
+"""
+GUI Forward Modeling Gravitasi — Multi-model (Sphere, Point mass, Voxel)
+
+Fitur:
+- Pilihan model: Sphere (bola), Point mass (massa titik), Voxel (blok kecil)
+- Input: koordinat x,y, kedalaman z, densitas ρ, radius R (jika sphere), massa m (jika point mass), ukuran voxel dx,dy,dz (jika voxel)
+- Menghitung peta anomali g_z (mGal) pada grid 2D
+- Menampilkan peta berwarna dengan penanda sumber, dua colorbar (positif/negatif label), dan profil g_z sepanjang sumbu X
+- Ekspor peta dan data ASCII
+
+Jalankan: python gravity_multi_model.py
+
+"""
+
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+import numpy as np
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+G_CONST = 6.67430e-11  # m^3 kg^-1 s^-2
+
+# ------------------
+# Fungsi model
+# ------------------
+
+def gz_sphere(X, Y, x0, y0, z0, R, rho):
+    """Anomali gz dari bola padat dengan radius R dan densitas rho (kontras densitas)."""
+    # massa anomali: volume * rho
+    mass = (4.0/3.0) * np.pi * R**3 * rho
+    dx = X - x0
+    dy = Y - y0
+    r2 = dx**2 + dy**2 + z0**2
+    gz = G_CONST * mass * z0 / (r2**1.5)
+    return gz * 1e5  # ke mGal
+
+
+def gz_pointmass(X, Y, x0, y0, z0, m):
+    """Anomali gz dari massa titik m (kg)."""
+    dx = X - x0
+    dy = Y - y0
+    r2 = dx**2 + dy**2 + z0**2
+    gz = G_CONST * m * z0 / (r2**1.5)
+    return gz * 1e5
+
+
+def gz_voxel(X, Y, x0, y0, z0, rho, dx_size, dy_size, dz_size):
+    """Aproksimasi voxel sebagai massa titik dengan massa = rho * volume voxel."""
+    vol = dx_size * dy_size * dz_size
+    mass = rho * vol
+    return gz_pointmass(X, Y, x0, y0, z0, mass)
+
+# ------------------
+# GUI
+# ------------------
+class GravityApp:
+    def __init__(self, master):
+        self.master = master
+        master.title('Forward Modeling Gravitasi — Multi-model')
+
+        # model selection
+        self.model_var = tk.StringVar(value='sphere')
+        ttk.Label(master, text='Pilih model sumber:').grid(row=0, column=0, sticky='w')
+        cmb = ttk.Combobox(master, textvariable=self.model_var, values=['sphere', 'pointmass', 'voxel'], state='readonly', width=12)
+        cmb.grid(row=0, column=1, sticky='w')
+        cmb.bind('<<ComboboxSelected>>', self.update_input_visibility)
+
+        # input koordinat dan properti dasar
+        base_frame = ttk.LabelFrame(master, text='Koordinat & Properti dasar')
+        base_frame.grid(row=1, column=0, columnspan=4, padx=6, pady=6, sticky='ew')
+
+        ttk.Label(base_frame, text='x (m)').grid(row=0, column=0)
+        self.ex = ttk.Entry(base_frame, width=8); self.ex.grid(row=1, column=0)
+        self.ex.insert(0, '30')
+        ttk.Label(base_frame, text='y (m)').grid(row=0, column=1)
+        self.ey = ttk.Entry(base_frame, width=8); self.ey.grid(row=1, column=1)
+        self.ey.insert(0, '40')
+        ttk.Label(base_frame, text='z kedalaman (m)').grid(row=0, column=2)
+        self.ez = ttk.Entry(base_frame, width=8); self.ez.grid(row=1, column=2)
+        self.ez.insert(0, '50')
+
+        ttk.Label(base_frame, text='ρ (kg/m³)').grid(row=0, column=3)
+        self.erho = ttk.Entry(base_frame, width=8); self.erho.grid(row=1, column=3)
+        self.erho.insert(0, '600')
+
+        # sphere-specific
+        sphere_frame = ttk.LabelFrame(master, text='Parameter Sphere (jika dipilih)')
+        sphere_frame.grid(row=2, column=0, columnspan=2, padx=6, pady=6, sticky='ew')
+        ttk.Label(sphere_frame, text='Radius R (m)').grid(row=0, column=0)
+        self.eR = ttk.Entry(sphere_frame, width=8); self.eR.grid(row=1, column=0)
+        self.eR.insert(0, '80')
+
+        # pointmass-specific
+        pm_frame = ttk.LabelFrame(master, text='Parameter Point mass (jika dipilih)')
+        pm_frame.grid(row=2, column=2, columnspan=2, padx=6, pady=6, sticky='ew')
+        ttk.Label(pm_frame, text='Massa m (kg)').grid(row=0, column=0)
+        self.em = ttk.Entry(pm_frame, width=12); self.em.grid(row=1, column=0)
+        self.em.insert(0, '')
+
+        # voxel-specific
+        voxel_frame = ttk.LabelFrame(master, text='Parameter Voxel (jika dipilih)')
+        voxel_frame.grid(row=3, column=0, columnspan=4, padx=6, pady=6, sticky='ew')
+        ttk.Label(voxel_frame, text='dx (m)').grid(row=0, column=0)
+        self.edx = ttk.Entry(voxel_frame, width=8); self.edx.grid(row=1, column=0); self.edx.insert(0, '20')
+        ttk.Label(voxel_frame, text='dy (m)').grid(row=0, column=1)
+        self.edy = ttk.Entry(voxel_frame, width=8); self.edy.grid(row=1, column=1); self.edy.insert(0, '20')
+        ttk.Label(voxel_frame, text='dz (m)').grid(row=0, column=2)
+        self.edz = ttk.Entry(voxel_frame, width=8); self.edz.grid(row=1, column=2); self.edz.insert(0, '20')
+
+        # grid settings
+        grid_frame = ttk.LabelFrame(master, text='Pengaturan grid peta')
+        grid_frame.grid(row=4, column=0, columnspan=4, padx=6, pady=6, sticky='ew')
+        ttk.Label(grid_frame, text='x start').grid(row=0, column=0)
+        self.ex1 = ttk.Entry(grid_frame, width=8); self.ex1.grid(row=1, column=0); self.ex1.insert(0,'-100')
+        ttk.Label(grid_frame, text='x end').grid(row=0, column=1)
+        self.ex2 = ttk.Entry(grid_frame, width=8); self.ex2.grid(row=1, column=1); self.ex2.insert(0,'100')
+        ttk.Label(grid_frame, text='nx').grid(row=0, column=2)
+        self.enx = ttk.Entry(grid_frame, width=8); self.enx.grid(row=1, column=2); self.enx.insert(0,'201')
+
+        ttk.Label(grid_frame, text='y start').grid(row=0, column=3)
+        self.ey1 = ttk.Entry(grid_frame, width=8); self.ey1.grid(row=1, column=3); self.ey1.insert(0,'-100')
+        ttk.Label(grid_frame, text='y end').grid(row=0, column=4)
+        self.ey2 = ttk.Entry(grid_frame, width=8); self.ey2.grid(row=1, column=4); self.ey2.insert(0,'100')
+        ttk.Label(grid_frame, text='ny').grid(row=0, column=5)
+        self.eny = ttk.Entry(grid_frame, width=8); self.eny.grid(row=1, column=5); self.eny.insert(0,'201')
+
+        # control buttons
+        ttk.Button(master, text='Hitung & Tampilkan', command=self.compute_and_plot).grid(row=5, column=0, pady=8)
+        ttk.Button(master, text='Deteksi & Tandai (threshold mGal)', command=self.detect_and_mark).grid(row=5, column=1)
+        self.ethresh = ttk.Entry(master, width=8); self.ethresh.grid(row=5, column=2); self.ethresh.insert(0,'0.01')
+        ttk.Button(master, text='Simpan Gambar', command=self.save_figure).grid(row=5, column=3)
+
+        # figure area (create two subplots: map and profile)
+        self.fig = plt.Figure(figsize=(8,6), constrained_layout=True)
+        gs = self.fig.add_gridspec(3,3)
+        self.ax_map = self.fig.add_subplot(gs[0:2, 0:3])
+        self.ax_profile = self.fig.add_subplot(gs[2, 0:3])
+        self.canvas = FigureCanvasTkAgg(self.fig, master=master)
+        self.canvas.get_tk_widget().grid(row=6, column=0, columnspan=4)
+
+        # initial state
+        self.update_input_visibility()
+        self.X = None; self.Y = None; self.Gmap = None
+
+    def update_input_visibility(self, event=None):
+        model = self.model_var.get()
+        # sphere: need R; pointmass: need m; voxel: need dx,dy,dz
+        if model == 'sphere':
+            self.eR.configure(state='normal')
+            self.em.configure(state='disabled')
+            self.edx.configure(state='disabled'); self.edy.configure(state='disabled'); self.edz.configure(state='disabled')
+        elif model == 'pointmass':
+            self.eR.configure(state='disabled')
+            self.em.configure(state='normal')
+            self.edx.configure(state='disabled'); self.edy.configure(state='disabled'); self.edz.configure(state='disabled')
+        else:  # voxel
+            self.eR.configure(state='disabled')
+            self.em.configure(state='disabled')
+            self.edx.configure(state='normal'); self.edy.configure(state='normal'); self.edz.configure(state='normal')
+
+    def compute_and_plot(self):
+        try:
+            x0 = float(self.ex.get()); y0 = float(self.ey.get()); z0 = float(self.ez.get())
+            rho = float(self.erho.get())
+            x1 = float(self.ex1.get()); x2 = float(self.ex2.get()); nx = int(self.enx.get())
+            y1 = float(self.ey1.get()); y2 = float(self.ey2.get()); ny = int(self.eny.get())
+        except Exception as e:
+            messagebox.showerror('Input error', f'Periksa input grid/koordinat.')
+        X = np.linspace(x1, x2, nx)
+        Y = np.linspace(y1, y2, ny)
+        XX, YY = np.meshgrid(X, Y)
+
+        model = self.model_var.get()
+        Gtot = np.zeros_like(XX)
+
+        if model == 'sphere':
+            try:
+                R = float(self.eR.get())
+            except:
+                messagebox.showerror('Input error', 'Masukkan radius R untuk model sphere'); return
+            Gtot = gz_sphere(XX, YY, x0, y0, z0, R, rho)
+        elif model == 'pointmass':
+            try:
+                m = float(self.em.get())
+            except:
+                messagebox.showerror('Input error', 'Masukkan massa m (kg) untuk model point mass'); return
+            Gtot = gz_pointmass(XX, YY, x0, y0, z0, m)
+        else:  # voxel
+            try:
+                dx_size = float(self.edx.get()); dy_size = float(self.edy.get()); dz_size = float(self.edz.get())
+            except:
+                messagebox.showerror('Input error', 'Masukkan ukuran voxel dx,dy,dz'); return
+            Gtot = gz_voxel(XX, YY, x0, y0, z0, rho, dx_size, dy_size, dz_size)
+
+        # simpan untuk operasi lain
+        self.X = XX; self.Y = YY; self.Gmap = Gtot
+
+        # plot map
+        self.ax_map.clear(); self.ax_profile.clear()
+        im = self.ax_map.imshow(Gtot, origin='lower', extent=[x1, x2, y1, y2], aspect='equal')
+        # buat dua colorbar di sebelah kanan (satu label Positive, satu Negative) mirip contoh
+        cbar = self.fig.colorbar(im, ax=self.ax_map, fraction=0.046, pad=0.04)
+        cbar.set_label('g_z (mGal)')
+        # kontur
+        try:
+            levels = np.linspace(np.nanmin(Gtot), np.nanmax(Gtot), 8)
+            self.ax_map.contour(self.X, self.Y, self.Gmap, levels=levels, colors='k', linewidths=0.6)
+        except Exception:
+            pass
+
+        # tandai sumber
+        self.ax_map.scatter([x0], [y0], color='k', s=40)
+        self.ax_map.text(x0, y0, f'x={x0:.1f} y={y0:.1f} z={z0:.1f}', color='white', fontsize=9, weight='bold', ha='left', va='bottom')
+
+        self.ax_map.set_title('Gravity anomaly map (g_z) [mGal]')
+        self.ax_map.set_xlabel('X (m)'); self.ax_map.set_ylabel('Y (m)')
+
+        # profile along X at middle Y (nearest index)
+        mid_y_idx = self.Y.shape[0] // 2
+        g_profile = self.Gmap[mid_y_idx, :]
+        x_axis = np.linspace(x1, x2, nx)
+        self.ax_profile.plot(x_axis, g_profile, color='purple', linewidth=2)
+        self.ax_profile.set_xlabel('X (m)'); self.ax_profile.set_ylabel('g_z (mGal)')
+        self.ax_profile.set_title('g_z profile along X axis')
+        self.ax_profile.grid(True, linestyle='--', alpha=0.5)
+
+        self.canvas.draw()
+
+    def detect_and_mark(self):
+        if self.Gmap is None:
+            messagebox.showinfo('Info', 'Hitung peta terlebih dahulu.')
+            return
+        try:
+            thr = float(self.ethresh.get())
+        except:
+            messagebox.showerror('Input error', 'Masukkan ambang numerik (mGal)'); return
+
+        G = self.Gmap
+        ny, nx = G.shape
+        peaks = []
+        for j in range(1, ny-1):
+            for i in range(1, nx-1):
+                val = G[j,i]
+                neigh = G[j-1:j+2, i-1:i+2]
+                if val >= thr and val == np.nanmax(neigh):
+                    xval = np.interp(i, [0, nx-1], [self.X[0,0], self.X[0,-1]])
+                    yval = np.interp(j, [0, ny-1], [self.Y[0,0], self.Y[-1,0]])
+                    peaks.append((xval, yval, val))
+
+        # plot markers
+        for (xv, yv, gv) in peaks:
+            self.ax_map.scatter([xv], [yv], marker='x', color='white', s=60)
+            self.ax_map.annotate(f'{gv:.3e}', xy=(xv, yv), xytext=(4,4), textcoords='offset points', color='white', fontsize=8)
+        self.fig.suptitle(f'Ditemukan {len(peaks)} anomali (>= {thr} mGal)')
+        self.canvas.draw()
+
+    def save_figure(self):
+        if self.Gmap is None:
+            messagebox.showinfo('Info', 'Hitung dulu sebelum menyimpan.')
+            return
+        fn = filedialog.asksaveasfilename(defaultextension='.png', filetypes=[('PNG','*.png')])
+        if fn:
+            self.fig.savefig(fn, dpi=300)
+            messagebox.showinfo('Info', f'Gambar tersimpan: {fn}')
+
+    def export_ascii(self):
+        if self.Gmap is None:
+            messagebox.showinfo('Info', 'Tidak ada data untuk diekspor.'); return
+        fn = filedialog.asksaveasfilename(defaultextension='.txt', filetypes=[('Text','*.txt')])
+        if not fn:
+            return
+        ny, nx = self.Gmap.shape
+        header = (
+            f"# x_start={self.X[0,0]} x_end={self.X[0,-1]} y_start={self.Y[0,0]} y_end={self.Y[-1,0]} nx={nx} ny={ny}"
+        )
+        data = np.column_stack((self.X.ravel(), self.Y.ravel(), self.Gmap.ravel()))
+        np.savetxt(fn, data, header=header)
+        messagebox.showinfo('Info', f'Data disimpan: {fn}')
+
+
+if __name__ == '__main__':
+    root = tk.Tk()
+    app = GravityApp(root)
+    root.mainloop()
