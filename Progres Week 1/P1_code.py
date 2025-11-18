@@ -47,6 +47,7 @@ def plot_gravity(x0, y0, z0, rho0):
     axs[0].imshow(pos_mask, extent=[-100, 100, -100, 100], origin='lower', cmap='viridis', vmin=0, vmax=vmax)
     axs[0].imshow(neg_mask, extent=[-100, 100, -100, 100], origin='lower', cmap='viridis', vmin=vmin, vmax=0)
 
+
     # Colorbar positif
     cbar_pos = fig.colorbar(plt.cm.ScalarMappable(cmap='viridis', norm=plt.Normalize(vmin=0, vmax=vmax)),
                             ax=axs[0], fraction=0.046, pad=0.04)
@@ -89,8 +90,7 @@ def on_plot():
 
 # GUI utama
 root = tk.Tk()
-root.title("Gravity Anomaly Calculator")
-
+root.title("Forward Modelling Gravitasi Sederhana")
 ttk.Label(root, text="Input koordinat dan parameter:").grid(row=0, column=0, columnspan=2, pady=10)
 
 ttk.Label(root, text="Nilai x (m):").grid(row=1, column=0, sticky="e")
@@ -109,7 +109,7 @@ ttk.Label(root, text="Nilai rho (densitas, kg/m³):").grid(row=4, column=0, stic
 entry_rho = ttk.Entry(root)
 entry_rho.grid(row=4, column=1)
 
-btn_plot = ttk.Button(root, text="Plot Gravity Anomaly", command=on_plot)
+btn_plot = ttk.Button(root, text="Plot", command=on_plot)
 btn_plot.grid(row=5, column=0, columnspan=2, pady=15)
 
 root.mainloop()
