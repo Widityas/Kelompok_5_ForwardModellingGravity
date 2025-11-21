@@ -1,13 +1,6 @@
 """
 GUI Forward Modeling Gravitasi — Multi-model (Sphere, Point mass, Voxel)
 
-Fitur:
-- Pilihan model: Sphere (bola), Point mass (massa titik), Voxel (blok kecil)
-- Input: koordinat x,y, kedalaman z, densitas ρ, radius R (jika sphere), massa m (jika point mass), ukuran voxel dx,dy,dz (jika voxel)
-- Menghitung peta anomali g_z (mGal) pada grid 2D
-- Menampilkan peta berwarna dengan penanda sumber, dua colorbar (positif/negatif label), dan profil g_z sepanjang sumbu X
-- Ekspor peta dan data ASCII
-
 Jalankan: python gravity_multi_model.py
 
 """
